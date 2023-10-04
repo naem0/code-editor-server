@@ -76,7 +76,7 @@ async function run() {
 
         app.get('/myrooms/:email', async (req, res) => {
             const email = req.params.email;
-            const query = { email: email };
+            const query = { 'member.email': email };
             const result = await roomsCollection.find(query).toArray();
             res.send(result);
         })
@@ -87,38 +87,15 @@ async function run() {
             res.send(result);
         })
 
-        app.put("/room", async (req, res) => {
-
-            try {
-                const room = req.body;
-                const id = req.params.id;
-                const query = { roomId: id };
-                const existingRoom = await roomsCollection.findOne(query);
-                if (!existingRoom) {
-                    return res.send({ message: 'Room not exists' });
-                }
-                const options = { upsert: true };
-                const newMamber = (room.mamber(...menubar));
-                const roomed = {
-                    $set: {
-                        mamber: newMamber,
-                    },
-                };
-                const result = await roomsCollection.updateOne(query, roomed, options);
-                res.send(result);
-            } catch (error) {
-                console.error(error);
-                res.status(500).json({ message: 'Internal server error' });
-            }
-        });
-        const userSocketMap = {};
+        
+        let userSocketMap = [];
         function getAllConnectedClients(roomId) {
             // Map
             return Array.from(io.sockets.adapter.rooms.get(roomId) || []).map(
                 (socketId) => {
+                    const {roomId, username, email, photoURL, time} = userSocketMap
                     return {
-                        socketId,
-                        username: userSocketMap[socketId],
+                        roomId, username, email, photoURL, socketId, time
                     };
                 }
             );
@@ -128,19 +105,19 @@ async function run() {
             console.log('socket connected', socket.id);
 
             socket.on("JOIN", async ({ roomId, username, email, photoURL }) => {
-                userSocketMap[socket.id] = username;
+                userSocketMap ={roomId, username, email, photoURL, time :new Date()}
                 socket.join(roomId);
-            
+                console.log(userSocketMap)
                 const newMember = {
                     username,
                     socketId: socket.id,
                     email,
                     photoURL,
+                    time :new Date()
                 };
             
                 const query = { roomId: roomId };
                 const existingRoom = await roomsCollection.findOne(query);
-            
                 if (!existingRoom) {
                     // Handle room not found error
                     socket.emit('room_not_found', { message: 'Room not found' });
@@ -169,6 +146,24 @@ async function run() {
             
                     await roomsCollection.updateOne(query, update, options);
                 }
+                else {
+                    // If that member remains, update the time field of that member
+                    const existingMemberIndex = existingRoom.member.findIndex(member => member.email === email);
+                    if (existingMemberIndex !== -1) {
+                        existingRoom.member[existingMemberIndex].time = new Date();
+                    }
+                
+                    const options = { upsert: true };
+                
+                    const update = {
+                        $set: {
+                            member: existingRoom.member,
+                        },
+                    };
+
+                    await roomsCollection.updateOne(query, update, options);
+                }
+                
             
                 const clients = getAllConnectedClients(roomId);
             
@@ -190,6 +185,7 @@ async function run() {
                     email,
                     photoURL,
                 });
+                
             });
             
 
@@ -207,6 +203,7 @@ async function run() {
                     const update = {
                         $set: {
                             code: code,
+                            modifi: new Date()
                         },
                     };
                     await roomsCollection.updateOne(query, update, options);
@@ -235,22 +232,56 @@ async function run() {
             });
         });
 
-        app.delete('/room/:id', async (req, res) => {
+        app.delete('/room/:roomId/member/:email', async (req, res) => {
             try {
-                const id = req.params._id;
-                const filter = { _id: new ObjectId(id) };
-                const result = await roomsCollection.deleteOne(filter);
-
-                if (result.deletedCount === 1) {
-                    res.status(200).json({ message: 'Room deleted successfully' });
+                const roomId = req.params.roomId;
+                const email = req.params.email;
+        
+                const query = { roomId: roomId };
+                const existingRoom = await roomsCollection.findOne(query);
+        
+                if (!existingRoom) {
+                    return res.status(404).json({ message: 'Room not found' });
+                }
+        
+                // Find the index of the member with the given email
+                const memberIndex = existingRoom.member.findIndex(member => member.email === email);
+        
+                if (memberIndex === -1) {
+                    return res.status(404).json({ message: 'Member not found in the room' });
+                }
+        
+                // Remove the member from the member array
+                existingRoom.member.splice(memberIndex, 1);
+        
+                // Check if there are no members left in the room
+                if (existingRoom.member.length === 0) {
+                    // If there are no members, delete the room
+                    await roomsCollection.deleteOne(query);
+                    return res.status(200).json({ message: 'Room deleted since there are no members left' });
+                }
+        
+                // Update the room with the modified member array
+                const update = {
+                    $set: {
+                        member: existingRoom.member,
+                    },
+                };
+        
+                const result = await roomsCollection.updateOne(query, update);
+        
+                if (result.modifiedCount === 1) {
+                    return res.status(200).json({ message: 'Member deleted from the room successfully' });
                 } else {
-                    res.status(404).json({ message: 'Room not found' });
+                    return res.status(500).json({ message: 'Failed to delete member from the room' });
                 }
             } catch (error) {
                 console.error(error);
                 res.status(500).json({ message: 'Internal server error' });
             }
         });
+        
+        
 
 
         await client.db("admin").command({ ping: 1 });
