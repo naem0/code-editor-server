@@ -2,14 +2,15 @@ const express = require('express');
 const app = express();
 const cors = require('cors');
 const http = require('http');
+require('dotenv').config()
 const server = http.createServer(app);
 const { Server } = require("socket.io");
-const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const { MongoClient, ServerApiVersion} = require('mongodb');
 const port = process.env.PORT || 3000;
 
 // Configure CORS to allow requests from your React application
 const corsOptions = {
-    origin: '*',
+    origin: `*`,
     methods: ['GET', 'POST', 'DELETE', 'PUT'],
 };
 
@@ -21,7 +22,7 @@ app.use(cors(corsOptions)); // Use the cors middleware with the specified option
 
 app.use(express.json());
 
-const uri = "mongodb+srv://codeEditor:URJdZnSHq7VRz6tX@cluster0.nmmhgrv.mongodb.net/?retryWrites=true&w=majority";
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.nmmhgrv.mongodb.net/?retryWrites=true&w=majority`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -87,7 +88,6 @@ async function run() {
             res.send(result);
         })
 
-        
         let userSocketMap = [];
         function getAllConnectedClients(roomId) {
             // Map
@@ -135,15 +135,12 @@ async function run() {
                 if (!existingMember) {
                     // If the member is not found, add the new member to the list
                     existingRoom.member.push(newMember);
-            
                     const options = { upsert: true };
-            
                     const update = {
                         $set: {
                             member: existingRoom.member,
                         },
                     };
-            
                     await roomsCollection.updateOne(query, update, options);
                 }
                 else {
@@ -152,19 +149,15 @@ async function run() {
                     if (existingMemberIndex !== -1) {
                         existingRoom.member[existingMemberIndex].time = new Date();
                     }
-                
                     const options = { upsert: true };
-                
                     const update = {
                         $set: {
                             member: existingRoom.member,
                         },
                     };
-
                     await roomsCollection.updateOne(query, update, options);
                 }
                 
-            
                 const clients = getAllConnectedClients(roomId);
             
                 // Emit the JOINED event to all clients in the room
@@ -177,19 +170,8 @@ async function run() {
                         photoURL,
                     });
                 });
-            
-                console.log({
-                    clients,
-                    username,
-                    socketId: socket.id,
-                    email,
-                    photoURL,
-                });
-                
             });
             
-
-
             socket.on("CODE_CHANGE", async ({ roomId, code }) => {
                 try {
                     const query = { roomId: roomId };
@@ -280,19 +262,13 @@ async function run() {
                 res.status(500).json({ message: 'Internal server error' });
             }
         });
-        
-        
-
 
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
 
-
         app.get('/', (req, res) => {
-            res.send('Hello World!');
+            res.send('Hello CodeFlow');
         });
-
-
 
         server.listen(port, () => {
             console.log(`listening on :${port}`);
