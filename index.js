@@ -39,27 +39,7 @@ async function run() {
         await client.connect();
         // Send a ping to confirm a successful connection
 
-        const usersCollection = client.db("codeEditorDB").collection("user");
         const roomsCollection = client.db("codeEditorDB").collection("room");
-
-        //user api
-        app.post('/user', async (req, res) => {
-            try {
-                const user = req.body;
-                const query = { email: user.email }
-                const existingUser = await usersCollection.findOne(query);
-
-                if (existingUser) {
-                    return res.send({ message: 'user already exists' })
-                }
-
-                const result = await usersCollection.insertOne(user);
-                res.send(result);
-            } catch (error) {
-                console.error(error);
-                res.status(500).json({ message: 'Internal server error', error });
-            }
-        });
 
         // Room api
         app.post('/room', async (req, res) => {
