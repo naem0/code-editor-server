@@ -5,7 +5,8 @@
   "main": "index.js",
   "start": "node index.js",
   "scripts": {
-    "start": "node index.js"
+    "dev": "nodemon index.js",
+    "build": "npm i"
   },
   "author": "",
   "license": "ISC",
